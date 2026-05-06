@@ -92,7 +92,7 @@ This repository is ready to be hosted on platforms like **Render**, **Railway**,
 ![UI Screenshot](UI.png)
 
 ### Video Walkthrough
-[Watch the Demo Video (Demo.mp4)](Demo.mp4)
+[Watch the Demo Video (Loom)](https://www.loom.com/share/5037df93b96f4ef094e1dab9ba330a9c)
 
 ---
 

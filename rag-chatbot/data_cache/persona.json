@@ -1,0 +1,144 @@
+{
+  "user_1": {
+    "habits": {
+      "sleep": [
+        "late sleeper (mentioned ~34 times)",
+        "early riser (mentioned ~55 times)"
+      ],
+      "food": [
+        "likes cooking (1768 mentions)",
+        "coffee drinker (261 mentions)",
+        "likes pizza (152 mentions)",
+        "vegetarian/vegan (100 mentions)",
+        "enjoys dining out (95 mentions)"
+      ],
+      "exercise": [
+        "does hiking (1036 mentions)",
+        "swims (372 mentions)",
+        "cycles (323 mentions)",
+        "runs/jogging (216 mentions)",
+        "goes to gym (174 mentions)"
+      ],
+      "hobbies_interests": [
+        "enjoys music (4465 mentions)",
+        "likes movies/TV (1359 mentions)",
+        "enjoys travel (983 mentions)",
+        "likes reading (958 mentions)",
+        "enjoys art (608 mentions)",
+        "likes photography (156 mentions)"
+      ]
+    },
+    "personal_facts": {
+      "relationships": [
+        "has a partner (286 mentions)",
+        "close to family (630 mentions)",
+        "has children (153 mentions)",
+        "has pets (860 mentions)"
+      ],
+      "locations": [
+        "Florida (11x)",
+        "Los Angeles (7x)",
+        "Australia (7x)",
+        "Sweden (6x)",
+        "Vienna (6x)",
+        "California (4x)",
+        "San Diego (4x)",
+        "Portland (3x)"
+      ],
+      "events": [
+        "moving/relocated (158 mentions)",
+        "new job/career (142 mentions)",
+        "studying/student (1064 mentions)",
+        "got married (164 mentions)",
+        "traveling soon (56 mentions)"
+      ]
+    },
+    "personality_traits": {
+      "humor": "low (393 humor signals in 98079 messages)",
+      "emotional_expressiveness": "high (19787 emotion words)",
+      "sentiment": "mostly positive (30198 positive, 383 negative)",
+      "directness": "moderate"
+    },
+    "communication_style": {
+      "avg_words_per_message": 11.1,
+      "message_style": "concise",
+      "tone": "enthusiastic",
+      "question_ratio": "27.0% of messages are questions",
+      "exclamation_ratio": "52.3% of messages use exclamation marks",
+      "emoji_usage": "rare/none",
+      "emoji_per_message": 0.0,
+      "total_messages_analysed": 98079
+    }
+  },
+  "user_2": {
+    "habits": {
+      "sleep": [
+        "late sleeper (mentioned ~33 times)",
+        "early riser (mentioned ~63 times)"
+      ],
+      "food": [
+        "likes cooking (1764 mentions)",
+        "coffee drinker (278 mentions)",
+        "likes pizza (158 mentions)",
+        "enjoys dining out (116 mentions)",
+        "vegetarian/vegan (111 mentions)"
+      ],
+      "exercise": [
+        "does hiking (1092 mentions)",
+        "swims (411 mentions)",
+        "cycles (336 mentions)",
+        "runs/jogging (224 mentions)",
+        "goes to gym (195 mentions)"
+      ],
+      "hobbies_interests": [
+        "enjoys music (4530 mentions)",
+        "likes movies/TV (1406 mentions)",
+        "likes reading (1020 mentions)",
+        "enjoys travel (969 mentions)",
+        "enjoys art (651 mentions)",
+        "likes photography (157 mentions)"
+      ]
+    },
+    "personal_facts": {
+      "relationships": [
+        "has a partner (389 mentions)",
+        "close to family (873 mentions)",
+        "has children (219 mentions)",
+        "has pets (975 mentions)"
+      ],
+      "locations": [
+        "Florida (9x)",
+        "Vienna (6x)",
+        "New York City (5x)",
+        "Australia (4x)",
+        "San Diego (4x)",
+        "Sweden (4x)",
+        "New Mexico (3x)",
+        "California (3x)"
+      ],
+      "events": [
+        "moving/relocated (156 mentions)",
+        "new job/career (134 mentions)",
+        "studying/student (1027 mentions)",
+        "got married (165 mentions)",
+        "traveling soon (51 mentions)"
+      ]
+    },
+    "personality_traits": {
+      "humor": "low (392 humor signals in 93513 messages)",
+      "emotional_expressiveness": "high (20700 emotion words)",
+      "sentiment": "mostly positive (30797 positive, 431 negative)",
+      "directness": "moderate"
+    },
+    "communication_style": {
+      "avg_words_per_message": 11.6,
+      "message_style": "concise",
+      "tone": "enthusiastic",
+      "question_ratio": "18.6% of messages are questions",
+      "exclamation_ratio": "53.6% of messages use exclamation marks",
+      "emoji_usage": "rare/none",
+      "emoji_per_message": 0.0,
+      "total_messages_analysed": 93513
+    }
+  }
+}

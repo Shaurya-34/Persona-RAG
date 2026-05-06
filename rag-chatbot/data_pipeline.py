@@ -1,0 +1,239 @@
+"""
+Data Pipeline — Topic Segmentation, 100-Message Checkpoints, FAISS Index
+=========================================================================
+Processes all conversations chronologically (message by message).
+1. Detects topic changes using TF-IDF cosine drift between sliding windows.
+2. Creates 100-message checkpoints (independent of topics).
+3. Embeds everything into a FAISS vector index for retrieval.
+"""
+
+import json
+import csv
+import io
+import os
+import sys
+import faiss
+import numpy as np
+from sentence_transformers import SentenceTransformer
+from sklearn.feature_extraction.text import TfidfVectorizer
+from sklearn.metrics.pairwise import cosine_similarity
+from collections import Counter
+import re
+import pickle
+
+# ── Configuration ──────────────────────────────────────────────────────
+DATA_PATH = 'conversations.csv'
+CHECKPOINT_EVERY = 100
+TOPIC_WINDOW = 10        # messages per sliding window
+TOPIC_STRIDE = 5         # overlapping slide stride
+DRIFT_THRESHOLD = 0.15   # cosine sim below this = topic change
+MAX_TOPIC_MSGS = 200     # force a topic break if segment gets too long
+CHUNK_SIZE = 5           # messages per fine-grained RAG chunk
+
+
+def extract_sentences(text):
+    """Split text into sentences for extractive summarisation."""
+    return [s.strip() for s in re.split(r'(?<=[.!?])\s+', text) if len(s.strip()) > 10]
+
+
+def summarize_text(text, n=3):
+    """TF-IDF-weighted extractive summariser — picks the top-n sentences."""
+    sentences = extract_sentences(text)
+    if len(sentences) <= n:
+        return text.strip()
+    try:
+        tfidf = TfidfVectorizer(stop_words='english').fit_transform(sentences)
+        scores = np.asarray(tfidf.sum(axis=1)).ravel()
+        top_idx = scores.argsort()[-n:][::-1]
+        top_idx.sort()
+        return " ".join(sentences[i] for i in top_idx)
+    except Exception:
+        return " ".join(sentences[:n])
+
+
+def extract_keywords(texts, top_n=5):
+    """Return the top-n TF-IDF keywords from a list of message texts."""
+    blob = " ".join(texts)
+    try:
+        tfidf = TfidfVectorizer(stop_words='english', max_features=top_n)
+        tfidf.fit_transform([blob])
+        return list(tfidf.get_feature_names_out())
+    except Exception:
+        # Fallback: most-common non-stop words
+        words = re.findall(r'\b[a-z]{4,}\b', blob.lower())
+        return [w for w, _ in Counter(words).most_common(top_n)]
+
+
+# ── Main Pipeline ──────────────────────────────────────────────────────
+def run_pipeline():
+    sys.stdout.reconfigure(encoding='utf-8')
+    print("=" * 60)
+    print("  RAG Data Pipeline")
+    print("=" * 60)
+
+    # ── 0. Load & flatten messages ─────────────────────────────────────
+    print("\n[1/5] Reading CSV …")
+    with open(DATA_PATH, 'r', encoding='utf-8') as f:
+        raw = f.read()
+
+    rows = list(csv.reader(io.StringIO(raw)))
+    print(f"  → {len(rows)} conversation rows")
+
+    messages = []
+    global_idx = 0
+    for conv_idx, row in enumerate(rows):
+        if not row:
+            continue
+        for line in row[0].strip().split('\n'):
+            line = line.strip()
+            if not line:
+                continue
+            speaker, text = "Unknown", line
+            if ":" in line:
+                speaker, text = line.split(":", 1)
+                speaker, text = speaker.strip(), text.strip()
+            messages.append({
+                "global_idx": global_idx,
+                "conv_id": conv_idx,
+                "speaker": speaker,
+                "text": text,
+            })
+            global_idx += 1
+
+    print(f"  → {len(messages)} total messages")
+
+    # ── 1. Topic Segmentation ──────────────────────────────────────────
+    print("\n[2/5] Topic Segmentation (overlapping sliding-window TF-IDF cosine drift) …")
+
+    topics = []
+    if not messages:
+        return
+
+    topic_start_idx = messages[0]['global_idx']
+    prev_text = " ".join(m['text'] for m in messages[0:TOPIC_WINDOW])
+
+    for i in range(TOPIC_STRIDE, len(messages), TOPIC_STRIDE):
+        curr_msgs = messages[i:i + TOPIC_WINDOW]
+        if not curr_msgs:
+            break
+        curr_text = " ".join(m['text'] for m in curr_msgs)
+
+        try:
+            vecs = TfidfVectorizer(stop_words='english').fit_transform([prev_text, curr_text])
+            sim = cosine_similarity(vecs[0], vecs[1])[0][0]
+        except Exception:
+            sim = 1.0
+
+        current_topic_length = curr_msgs[-1]['global_idx'] - topic_start_idx
+
+        if sim < DRIFT_THRESHOLD or current_topic_length >= MAX_TOPIC_MSGS:
+            # ─── topic boundary detected ───
+            # The topic ends right before the new window `i`
+            boundary_idx = curr_msgs[0]['global_idx']
+            t_msgs = [m for m in messages if topic_start_idx <= m['global_idx'] < boundary_idx]
+            if not t_msgs:
+                t_msgs = curr_msgs # failsafe
+            texts = [m['text'] for m in t_msgs]
+            topics.append({
+                "topic_id": len(topics),
+                "start_msg": t_msgs[0]['global_idx'],
+                "end_msg": t_msgs[-1]['global_idx'],
+                "message_count": len(t_msgs),
+                "keywords": extract_keywords(texts),
+                "summary": summarize_text(" ".join(texts), n=3),
+            })
+            topic_start_idx = boundary_idx
+
+        prev_text = curr_text
+
+    # flush last topic
+    if topic_start_idx <= messages[-1]['global_idx']:
+        t_msgs = [m for m in messages if m['global_idx'] >= topic_start_idx]
+        if t_msgs:
+            texts = [m['text'] for m in t_msgs]
+            topics.append({
+                "topic_id": len(topics),
+                "start_msg": t_msgs[0]['global_idx'],
+                "end_msg": t_msgs[-1]['global_idx'],
+                "message_count": len(t_msgs),
+                "keywords": extract_keywords(texts),
+                "summary": summarize_text(" ".join(texts), n=3),
+            })
+
+
+    print(f"  → {len(topics)} topics detected")
+    for t in topics[:5]:
+        print(f"    Topic {t['topic_id']}: msgs {t['start_msg']}–{t['end_msg']} "
+              f"({t['message_count']} msgs) keywords={t['keywords']}")
+    if len(topics) > 5:
+        print(f"    … and {len(topics) - 5} more")
+
+    # ── 2. 100-Message Checkpoints ─────────────────────────────────────
+    print("\n[3/5] 100-Message Checkpoints …")
+    checkpoints = []
+    for i in range(0, len(messages), CHECKPOINT_EVERY):
+        chunk = messages[i:i + CHECKPOINT_EVERY]
+        chunk_text = " ".join(m['text'] for m in chunk)
+        checkpoints.append({
+            "checkpoint_id": len(checkpoints),
+            "start_msg": chunk[0]['global_idx'],
+            "end_msg": chunk[-1]['global_idx'],
+            "summary": summarize_text(chunk_text, n=5),
+        })
+    print(f"  → {len(checkpoints)} checkpoints")
+
+    # ── 3. Embedding & FAISS ───────────────────────────────────────────
+    print("\n[4/5] Loading sentence-transformers model …")
+    embedder = SentenceTransformer('all-MiniLM-L6-v2')
+
+    documents = []
+    metadata = []
+
+    # topic summaries
+    for t in topics:
+        documents.append(f"Topic about {', '.join(t['keywords'])}. {t['summary']}")
+        metadata.append({"type": "topic", "data": t})
+
+    # checkpoint summaries
+    for c in checkpoints:
+        documents.append(c["summary"])
+        metadata.append({"type": "checkpoint", "data": c})
+
+    # fine-grained message chunks
+    for i in range(0, len(messages), CHUNK_SIZE):
+        chunk = messages[i:i + CHUNK_SIZE]
+        chunk_text = " ".join(f"{m['speaker']}: {m['text']}" for m in chunk)
+        documents.append(chunk_text)
+        metadata.append({"type": "chunk", "data": {
+            "start_idx": chunk[0]['global_idx'],
+            "end_idx": chunk[-1]['global_idx'],
+            "text": chunk_text,
+        }})
+
+    print(f"\n[5/5] Embedding {len(documents)} documents into FAISS …")
+    embeddings = embedder.encode(documents, show_progress_bar=True, batch_size=256)
+
+    index = faiss.IndexFlatIP(embeddings.shape[1])        # inner-product (cosine after normalisation)
+    faiss.normalize_L2(embeddings)                        # normalise so IP = cosine
+    index.add(embeddings)
+
+    # ── Save ───────────────────────────────────────────────────────────
+    os.makedirs('data_cache', exist_ok=True)
+    faiss.write_index(index, 'data_cache/rag_index.faiss')
+    with open('data_cache/metadata.pkl', 'wb') as f:
+        pickle.dump(metadata, f)
+    with open('data_cache/messages.json', 'w', encoding='utf-8') as f:
+        json.dump(messages, f)
+    with open('data_cache/topics.json', 'w', encoding='utf-8') as f:
+        json.dump(topics, f, indent=2)
+    with open('data_cache/checkpoints.json', 'w', encoding='utf-8') as f:
+        json.dump(checkpoints, f, indent=2)
+
+    print("\n✓ Pipeline complete.  data_cache/ populated.")
+    print(f"  Topics:      {len(topics)}")
+    print(f"  Checkpoints: {len(checkpoints)}")
+    print(f"  FAISS docs:  {len(documents)}")
+
+
+if __name__ == "__main__":
+    run_pipeline()

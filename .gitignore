@@ -1,0 +1,15 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+venv/
+.env
+
+# Data
+# We keep data_cache/ so the app is "ready to go" for reviewers without processing
+# but we ignore the massive raw conversations.csv to keep the repo size manageable
+conversations.csv
+
+# IDEs
+.vscode/
+.idea/

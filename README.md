@@ -1,3 +1,12 @@
+---
+title: Persona RAG Chatbot
+emoji: 💬
+colorFrom: blue
+colorTo: indigo
+sdk: docker
+pinned: false
+---
+
 # RAG Persona Chatbot
 
 This project is a complete end-to-end Retrieval-Augmented Generation (RAG) system and Persona Extractor built on a dataset of 11,000+ multi-turn conversations (100k+ messages). It was built to demonstrate advanced contextual segmentation and user intelligence, all running entirely on local algorithms without relying on external LLM APIs like OpenAI.

@@ -14,11 +14,11 @@ RUN pip install --no-cache-dir -r requirements.txt
 # the app will be able to start immediately without running the pipeline.
 COPY . .
 
-# Expose the FastAPI port
-EXPOSE 8000
+# Expose the port Hugging Face expects
+EXPOSE 7860
 
 # Prevent OpenMP runtime crashes
 ENV KMP_DUPLICATE_LIB_OK=TRUE
 
-# Start the application
-CMD ["uvicorn", "app:app", "--host", "0.0.0.0", "--port", "8000"]
+# Start the application on port 7860
+CMD ["uvicorn", "app:app", "--host", "0.0.0.0", "--port", "7860"]

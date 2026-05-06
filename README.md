@@ -86,15 +86,13 @@ This repository is ready to be hosted on platforms like **Render**, **Railway**,
 
 ---
 
-## 🎥 Demo & Links
+## 🎥 Demo & Media
 
-- **Live Chatbot URL:** [Insert Cloud URL Here]
-- **Video Walkthrough (Loom):** [Insert Loom Link Here]
+### User Interface Snapshot
+![UI Screenshot](UI.png)
 
-### Screenshots
-*(Add screenshots of the UI here demonstrating the Persona quick actions and RAG retrieval sources)*
-- `Screenshot 1`: The Persona Sidebar displaying habits, communication style, and personality stats.
-- `Screenshot 2`: The Chatbot answering a contextual query with cited message chunks and topic summaries.
+### Video Walkthrough
+[Watch the Demo Video (Demo.mp4)](Demo.mp4)
 
 ---
 

@@ -134,6 +134,20 @@ LWW + union merge handles 99% of real-world cases with zero overhead.
 
 ---
 
+## Tradeoffs & Design Decisions
+
+| Decision | Pros | Cons |
+|---|---|---|
+| **Local-first (no cloud dependency)** | Zero latency, full privacy, works offline | No cross-device sync out-of-the-box; user must manually transfer data |
+| **TF-IDF + LogReg over transformer** | 75 KB model, 0.11ms inference, zero GPU need | Lower accuracy (78%) vs DistilBERT (~92%); struggles with ambiguous inputs |
+| **Synthetic day bucketing (15 convos = 1 day)** | Works without real timestamps; enables temporal features | Not true chronological ordering; drift detection granularity is approximate |
+| **LWW conflict resolution over CRDTs** | Simple to implement, no state overhead | Can lose data if two devices edit the same scalar field simultaneously |
+| **FAISS over SQLite FTS** | Fast dense vector search, handles semantic similarity | Large binary (60 MB), not portable to mobile/browser without adaptation |
+| **Template-based synthesis over LLM** | Fully deterministic, zero API cost, instant response | Answers lack natural fluency; can't rephrase or reason over retrieved context |
+| **Composite scoring (cosine + recency + emotion)** | Balances relevance with temporal context and emotional importance | Weight values (0.6/0.25/0.15) are hand-tuned, not learned from user feedback |
+
+---
+
 ## Sync Protocol (If Implemented)
 
 ```

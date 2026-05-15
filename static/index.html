@@ -4,488 +4,359 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Persona RAG Chatbot</title>
-    <meta name="description" content="RAG-powered chatbot with user persona extraction from conversation data">
+    <meta name="description" content="Adaptive RAG chatbot with persona drift tracking, offline intent classification, and conflict-aware retrieval">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
     <style>
         :root {
-            --bg-dark: #0f1117;
-            --bg-surface: #1a1d27;
-            --bg-card: #222636;
-            --bg-hover: #2a2e3f;
-            --border: #2e3348;
-            --text-primary: #e8eaf0;
-            --text-secondary: #9ca3af;
-            --text-muted: #6b7280;
-            --accent: #6366f1;
-            --accent-hover: #818cf8;
-            --accent-glow: rgba(99, 102, 241, 0.15);
-            --green: #34d399;
-            --orange: #fbbf24;
-            --pink: #f472b6;
-            --radius: 12px;
-            --radius-sm: 8px;
-            --transition: 0.2s ease;
+            --bg-dark: #0f1117; --bg-surface: #1a1d27; --bg-card: #222636;
+            --bg-hover: #2a2e3f; --border: #2e3348;
+            --text-primary: #e8eaf0; --text-secondary: #9ca3af; --text-muted: #6b7280;
+            --accent: #6366f1; --accent-hover: #818cf8; --accent-glow: rgba(99,102,241,0.15);
+            --green: #34d399; --orange: #fbbf24; --pink: #f472b6; --red: #ef4444;
+            --radius: 12px; --radius-sm: 8px; --transition: 0.2s ease;
         }
+        * { margin:0; padding:0; box-sizing:border-box; }
+        body { font-family:'Inter',-apple-system,sans-serif; background:var(--bg-dark); color:var(--text-primary); display:flex; height:100vh; overflow:hidden; }
 
-        * { margin: 0; padding: 0; box-sizing: border-box; }
+        /* Sidebar */
+        .sidebar { width:320px; min-width:320px; background:var(--bg-surface); border-right:1px solid var(--border); display:flex; flex-direction:column; overflow-y:auto; }
+        .sidebar-header { padding:20px 20px 12px; border-bottom:1px solid var(--border); }
+        .sidebar-header h1 { font-size:18px; font-weight:700; background:linear-gradient(135deg,var(--accent),var(--pink)); -webkit-background-clip:text; background-clip:text; -webkit-text-fill-color:transparent; }
+        .sidebar-header p { font-size:12px; color:var(--text-muted); margin-top:4px; }
+        .persona-section { padding:16px 20px; border-bottom:1px solid var(--border); }
+        .persona-section h3 { font-size:11px; text-transform:uppercase; letter-spacing:1px; color:var(--text-muted); margin-bottom:10px; }
+        .persona-item { display:flex; align-items:flex-start; gap:8px; padding:6px 0; font-size:13px; color:var(--text-secondary); line-height:1.5; }
+        .persona-item .icon { font-size:14px; flex-shrink:0; margin-top:2px; }
+        .stats-grid { display:grid; grid-template-columns:1fr 1fr; gap:8px; margin-top:8px; }
+        .stat-card { background:var(--bg-card); border:1px solid var(--border); border-radius:var(--radius-sm); padding:10px; text-align:center; }
+        .stat-card .value { font-size:18px; font-weight:700; color:var(--accent); }
+        .stat-card .label { font-size:10px; color:var(--text-muted); text-transform:uppercase; letter-spacing:0.5px; margin-top:2px; }
 
-        body {
-            font-family: 'Inter', -apple-system, sans-serif;
-            background: var(--bg-dark);
-            color: var(--text-primary);
-            display: flex;
-            height: 100vh;
-            overflow: hidden;
-        }
+        /* Main */
+        .main { flex:1; display:flex; flex-direction:column; min-width:0; }
+        .main-header { padding:16px 24px; border-bottom:1px solid var(--border); display:flex; align-items:center; justify-content:space-between; }
+        .main-header h2 { font-size:16px; font-weight:600; }
+        .status-badge { display:flex; align-items:center; gap:6px; font-size:12px; color:var(--green); }
+        .status-dot { width:8px; height:8px; background:var(--green); border-radius:50%; animation:pulse 2s infinite; }
+        @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:.4} }
 
-        /* ── Sidebar ─────────────────────────────────── */
-        .sidebar {
-            width: 320px;
-            min-width: 320px;
-            background: var(--bg-surface);
-            border-right: 1px solid var(--border);
-            display: flex;
-            flex-direction: column;
-            overflow-y: auto;
-        }
+        /* Tabs */
+        .tab-bar { display:flex; border-bottom:1px solid var(--border); background:var(--bg-surface); }
+        .tab-btn { flex:1; padding:12px 16px; background:none; border:none; border-bottom:2px solid transparent; color:var(--text-muted); font-family:inherit; font-size:13px; font-weight:500; cursor:pointer; transition:all var(--transition); }
+        .tab-btn:hover { color:var(--text-secondary); }
+        .tab-btn.active { color:var(--accent); border-bottom-color:var(--accent); }
+        .tab-content { display:none; flex:1; overflow-y:auto; flex-direction:column; }
+        .tab-content.active { display:flex; }
 
-        .sidebar-header {
-            padding: 20px 20px 12px;
-            border-bottom: 1px solid var(--border);
-        }
+        /* Quick Actions */
+        .quick-actions { padding:12px 24px; display:flex; gap:8px; flex-wrap:wrap; border-bottom:1px solid var(--border); background:var(--bg-surface); }
+        .quick-btn { background:var(--bg-card); border:1px solid var(--border); color:var(--text-secondary); padding:8px 14px; border-radius:20px; font-size:12px; font-family:inherit; cursor:pointer; transition:all var(--transition); }
+        .quick-btn:hover { border-color:var(--accent); color:var(--accent); background:var(--accent-glow); }
 
-        .sidebar-header h1 {
-            font-size: 18px;
-            font-weight: 700;
-            background: linear-gradient(135deg, var(--accent), var(--pink));
-            -webkit-background-clip: text;
-            background-clip: text;
-            -webkit-text-fill-color: transparent;
-        }
+        /* Messages */
+        .messages { flex:1; padding:20px 24px; overflow-y:auto; display:flex; flex-direction:column; gap:16px; }
+        .message { max-width:85%; padding:14px 18px; border-radius:var(--radius); line-height:1.6; font-size:14px; animation:fadeIn .3s ease; }
+        @keyframes fadeIn { from{opacity:0;transform:translateY(8px)} to{opacity:1;transform:translateY(0)} }
+        .message.user { align-self:flex-end; background:linear-gradient(135deg,var(--accent),#7c3aed); color:white; border-bottom-right-radius:4px; }
+        .message.bot { align-self:flex-start; background:var(--bg-card); border:1px solid var(--border); border-bottom-left-radius:4px; }
+        .message.bot pre { white-space:pre-wrap; font-family:inherit; margin:0; }
+        .message.bot strong { color:var(--accent-hover); }
+        .intent-badge { display:inline-block; background:var(--accent-glow); border:1px solid var(--accent); border-radius:12px; padding:2px 10px; font-size:11px; color:var(--accent-hover); margin-bottom:8px; }
+        .sources-section { margin-top:12px; padding-top:10px; border-top:1px solid var(--border); }
+        .sources-title { font-size:11px; text-transform:uppercase; letter-spacing:.5px; color:var(--text-muted); margin-bottom:6px; }
+        .source-tag { display:inline-block; background:var(--bg-surface); border:1px solid var(--border); border-radius:6px; padding:4px 10px; font-size:11px; color:var(--text-muted); margin:2px 4px 2px 0; }
+        .source-tag.topic { border-left:3px solid var(--accent); }
+        .source-tag.chunk { border-left:3px solid var(--green); }
+        .source-tag.checkpoint { border-left:3px solid var(--orange); }
+        .source-tag.persona { border-left:3px solid var(--pink); }
 
-        .sidebar-header p {
-            font-size: 12px;
-            color: var(--text-muted);
-            margin-top: 4px;
-        }
+        /* Input Area */
+        .input-area { padding:16px 24px; border-top:1px solid var(--border); background:var(--bg-surface); display:flex; gap:10px; }
+        .input-area input { flex:1; padding:12px 16px; background:var(--bg-card); border:1px solid var(--border); border-radius:var(--radius-sm); color:var(--text-primary); font-family:inherit; font-size:14px; outline:none; transition:border-color var(--transition); }
+        .input-area input:focus { border-color:var(--accent); }
+        .input-area input::placeholder { color:var(--text-muted); }
+        .send-btn { padding:12px 20px; background:linear-gradient(135deg,var(--accent),#7c3aed); border:none; border-radius:var(--radius-sm); color:white; font-family:inherit; font-size:14px; font-weight:600; cursor:pointer; transition:opacity var(--transition); }
+        .send-btn:hover { opacity:.9; }
 
-        .persona-section {
-            padding: 16px 20px;
-            border-bottom: 1px solid var(--border);
-        }
+        /* Timeline */
+        .timeline-container { padding:24px; }
+        .timeline-header { margin-bottom:20px; }
+        .timeline-header h3 { font-size:16px; font-weight:600; margin-bottom:4px; }
+        .timeline-header p { font-size:13px; color:var(--text-muted); }
+        .timeline-stats { display:flex; gap:12px; margin-bottom:24px; }
+        .tl-stat { background:var(--bg-card); border:1px solid var(--border); border-radius:var(--radius-sm); padding:14px 18px; flex:1; text-align:center; }
+        .tl-stat .val { font-size:24px; font-weight:700; color:var(--accent); }
+        .tl-stat .lbl { font-size:11px; color:var(--text-muted); text-transform:uppercase; margin-top:4px; }
+        .chart-area { background:var(--bg-card); border:1px solid var(--border); border-radius:var(--radius); padding:20px; margin-bottom:24px; overflow-x:auto; }
+        .chart-title { font-size:13px; font-weight:600; margin-bottom:16px; color:var(--text-secondary); }
+        .chart-svg { width:100%; min-width:600px; }
+        .drift-list { margin-top:24px; }
+        .drift-list h4 { font-size:14px; font-weight:600; margin-bottom:12px; color:var(--text-secondary); }
+        .drift-card { background:var(--bg-card); border:1px solid var(--border); border-left:3px solid var(--orange); border-radius:var(--radius-sm); padding:14px 16px; margin-bottom:10px; animation:fadeIn .3s ease; }
+        .drift-card .drift-day { font-size:14px; font-weight:600; color:var(--orange); }
+        .drift-card .drift-change { font-size:13px; color:var(--text-secondary); margin-top:4px; }
+        .drift-card .drift-triggers { font-size:12px; color:var(--text-muted); margin-top:6px; }
+        .trigger-tag { display:inline-block; background:var(--bg-hover); border-radius:4px; padding:2px 8px; font-size:11px; margin:2px 4px 2px 0; color:var(--text-secondary); }
 
-        .persona-section h3 {
-            font-size: 11px;
-            text-transform: uppercase;
-            letter-spacing: 1px;
-            color: var(--text-muted);
-            margin-bottom: 10px;
-        }
+        /* Scrollbar */
+        ::-webkit-scrollbar { width:6px; }
+        ::-webkit-scrollbar-track { background:transparent; }
+        ::-webkit-scrollbar-thumb { background:var(--border); border-radius:3px; }
+        ::-webkit-scrollbar-thumb:hover { background:var(--text-muted); }
 
-        .persona-item {
-            display: flex;
-            align-items: flex-start;
-            gap: 8px;
-            padding: 6px 0;
-            font-size: 13px;
-            color: var(--text-secondary);
-            line-height: 1.5;
-        }
-
-        .persona-item .icon { font-size: 14px; flex-shrink: 0; margin-top: 2px; }
-
-        .stats-grid {
-            display: grid;
-            grid-template-columns: 1fr 1fr;
-            gap: 8px;
-            margin-top: 8px;
-        }
-
-        .stat-card {
-            background: var(--bg-card);
-            border: 1px solid var(--border);
-            border-radius: var(--radius-sm);
-            padding: 10px;
-            text-align: center;
-        }
-
-        .stat-card .value {
-            font-size: 18px;
-            font-weight: 700;
-            color: var(--accent);
-        }
-
-        .stat-card .label {
-            font-size: 10px;
-            color: var(--text-muted);
-            text-transform: uppercase;
-            letter-spacing: 0.5px;
-            margin-top: 2px;
-        }
-
-        /* ── Main ────────────────────────────────────── */
-        .main {
-            flex: 1;
-            display: flex;
-            flex-direction: column;
-            min-width: 0;
-        }
-
-        .main-header {
-            padding: 16px 24px;
-            border-bottom: 1px solid var(--border);
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-        }
-
-        .main-header h2 {
-            font-size: 16px;
-            font-weight: 600;
-        }
-
-        .status-badge {
-            display: flex;
-            align-items: center;
-            gap: 6px;
-            font-size: 12px;
-            color: var(--green);
-        }
-
-        .status-dot {
-            width: 8px;
-            height: 8px;
-            background: var(--green);
-            border-radius: 50%;
-            animation: pulse 2s infinite;
-        }
-
-        @keyframes pulse {
-            0%, 100% { opacity: 1; }
-            50% { opacity: 0.4; }
-        }
-
-        /* ── Quick Actions ────────────────────────────── */
-        .quick-actions {
-            padding: 12px 24px;
-            display: flex;
-            gap: 8px;
-            flex-wrap: wrap;
-            border-bottom: 1px solid var(--border);
-            background: var(--bg-surface);
-        }
-
-        .quick-btn {
-            background: var(--bg-card);
-            border: 1px solid var(--border);
-            color: var(--text-secondary);
-            padding: 8px 14px;
-            border-radius: 20px;
-            font-size: 12px;
-            font-family: inherit;
-            cursor: pointer;
-            transition: all var(--transition);
-        }
-
-        .quick-btn:hover {
-            border-color: var(--accent);
-            color: var(--accent);
-            background: var(--accent-glow);
-        }
-
-        /* ── Messages ─────────────────────────────────── */
-        .messages {
-            flex: 1;
-            padding: 20px 24px;
-            overflow-y: auto;
-            display: flex;
-            flex-direction: column;
-            gap: 16px;
-        }
-
-        .message {
-            max-width: 85%;
-            padding: 14px 18px;
-            border-radius: var(--radius);
-            line-height: 1.6;
-            font-size: 14px;
-            animation: fadeIn 0.3s ease;
-        }
-
-        @keyframes fadeIn {
-            from { opacity: 0; transform: translateY(8px); }
-            to   { opacity: 1; transform: translateY(0); }
-        }
-
-        .message.user {
-            align-self: flex-end;
-            background: linear-gradient(135deg, var(--accent), #7c3aed);
-            color: white;
-            border-bottom-right-radius: 4px;
-        }
-
-        .message.bot {
-            align-self: flex-start;
-            background: var(--bg-card);
-            border: 1px solid var(--border);
-            border-bottom-left-radius: 4px;
-        }
-
-        .message.bot pre {
-            white-space: pre-wrap;
-            font-family: inherit;
-            margin: 0;
-        }
-
-        .message.bot strong { color: var(--accent-hover); }
-
-        .sources-section {
-            margin-top: 12px;
-            padding-top: 10px;
-            border-top: 1px solid var(--border);
-        }
-
-        .sources-title {
-            font-size: 11px;
-            text-transform: uppercase;
-            letter-spacing: 0.5px;
-            color: var(--text-muted);
-            margin-bottom: 6px;
-        }
-
-        .source-tag {
-            display: inline-block;
-            background: var(--bg-surface);
-            border: 1px solid var(--border);
-            border-radius: 6px;
-            padding: 4px 10px;
-            font-size: 11px;
-            color: var(--text-muted);
-            margin: 2px 4px 2px 0;
-        }
-
-        .source-tag.topic   { border-left: 3px solid var(--accent); }
-        .source-tag.chunk   { border-left: 3px solid var(--green); }
-        .source-tag.checkpoint { border-left: 3px solid var(--orange); }
-        .source-tag.persona { border-left: 3px solid var(--pink); }
-
-        /* ── Input Area ───────────────────────────────── */
-        .input-area {
-            padding: 16px 24px;
-            border-top: 1px solid var(--border);
-            background: var(--bg-surface);
-            display: flex;
-            gap: 10px;
-        }
-
-        .input-area input {
-            flex: 1;
-            padding: 12px 16px;
-            background: var(--bg-card);
-            border: 1px solid var(--border);
-            border-radius: var(--radius-sm);
-            color: var(--text-primary);
-            font-family: inherit;
-            font-size: 14px;
-            outline: none;
-            transition: border-color var(--transition);
-        }
-
-        .input-area input:focus { border-color: var(--accent); }
-        .input-area input::placeholder { color: var(--text-muted); }
-
-        .send-btn {
-            padding: 12px 20px;
-            background: linear-gradient(135deg, var(--accent), #7c3aed);
-            border: none;
-            border-radius: var(--radius-sm);
-            color: white;
-            font-family: inherit;
-            font-size: 14px;
-            font-weight: 600;
-            cursor: pointer;
-            transition: opacity var(--transition);
-        }
-
-        .send-btn:hover { opacity: 0.9; }
-
-        /* ── Scrollbar ────────────────────────────────── */
-        ::-webkit-scrollbar { width: 6px; }
-        ::-webkit-scrollbar-track { background: transparent; }
-        ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
-        ::-webkit-scrollbar-thumb:hover { background: var(--text-muted); }
-
-        /* ── Loading dots ─────────────────────────────── */
-        .typing-indicator span {
-            display: inline-block;
-            width: 6px; height: 6px;
-            background: var(--text-muted);
-            border-radius: 50%;
-            margin-right: 4px;
-            animation: blink 1.4s infinite both;
-        }
-        .typing-indicator span:nth-child(2) { animation-delay: 0.2s; }
-        .typing-indicator span:nth-child(3) { animation-delay: 0.4s; }
+        .typing-indicator span { display:inline-block; width:6px; height:6px; background:var(--text-muted); border-radius:50%; margin-right:4px; animation:blink 1.4s infinite both; }
+        .typing-indicator span:nth-child(2) { animation-delay:.2s; }
+        .typing-indicator span:nth-child(3) { animation-delay:.4s; }
         @keyframes blink { 0%,80%,100%{opacity:.2} 40%{opacity:1} }
     </style>
 </head>
 <body>
 
-<!-- ── Sidebar ────────────────────────────────────── -->
 <aside class="sidebar">
     <div class="sidebar-header">
         <h1>🧠 Persona RAG</h1>
-        <p>Conversation Intelligence Engine</p>
+        <p>Adaptive Conversation Intelligence</p>
     </div>
-
     <div class="persona-section" id="persona-stats"></div>
     <div class="persona-section" id="persona-habits"></div>
     <div class="persona-section" id="persona-facts"></div>
     <div class="persona-section" id="persona-style"></div>
 </aside>
 
-<!-- ── Main Chat ──────────────────────────────────── -->
 <main class="main">
     <div class="main-header">
-        <h2>💬 Chat</h2>
-        <div class="status-badge"><div class="status-dot"></div> RAG Online</div>
+        <h2>💬 Persona RAG</h2>
+        <div class="status-badge"><div class="status-dot"></div> <span id="status-text">Loading…</span></div>
     </div>
 
-    <div class="quick-actions">
-        <button class="quick-btn" onclick="ask('What kind of person is this user?')">👤 What kind of person?</button>
-        <button class="quick-btn" onclick="ask('What are their habits?')">🔁 Habits</button>
-        <button class="quick-btn" onclick="ask('How do they talk?')">💬 Communication style</button>
-        <button class="quick-btn" onclick="ask('What topics do they discuss most?')">📋 Top topics</button>
-        <button class="quick-btn" onclick="ask('Tell me about their hobbies')">🎮 Hobbies</button>
-        <button class="quick-btn" onclick="ask('What life events are mentioned?')">📅 Life events</button>
+    <div class="tab-bar">
+        <button class="tab-btn active" onclick="switchTab('chat')">💬 Chat</button>
+        <button class="tab-btn" onclick="switchTab('timeline')">📊 Timeline</button>
     </div>
 
-    <div class="messages" id="messages">
-        <div class="message bot">
-            <pre>Hi! I'm the <strong>Persona RAG Chatbot</strong>. I've analysed thousands of conversation messages to build topic summaries, checkpoints, and a user persona.
+    <!-- Chat Tab -->
+    <div class="tab-content active" id="tab-chat" style="flex-direction:column;">
+        <div class="quick-actions">
+            <button class="quick-btn" onclick="ask('What kind of person is this user?')">👤 Who are they?</button>
+            <button class="quick-btn" onclick="ask('What are their habits?')">🔁 Habits</button>
+            <button class="quick-btn" onclick="ask('How do they talk?')">💬 Style</button>
+            <button class="quick-btn" onclick="ask('Did I mention anything about my sister?')">👨‍👩‍👧 Sister?</button>
+            <button class="quick-btn" onclick="ask('Remind me to call the doctor')">📌 Reminder</button>
+            <button class="quick-btn" onclick="ask('I feel really stressed lately')">💙 Support</button>
+        </div>
+        <div class="messages" id="messages">
+            <div class="message bot"><pre>Hi! I'm the <strong>Persona RAG Chatbot</strong> with adaptive intelligence.
 
-Ask me things like:
-• "What kind of person is this user?"
-• "What are their habits?"
-• "How do they talk?"
-• Or any topic-specific question!</pre>
+Features:
+• <strong>Persona Drift</strong> — I track how mood/tone changes over time
+• <strong>Intent Detection</strong> — I classify your messages offline
+• <strong>Conflict Resolution</strong> — I flag contradictions in memories
+• <strong>Timeline</strong> — Check the 📊 Timeline tab for drift events
+
+Try asking anything about the users or their conversations!</pre></div>
+        </div>
+        <div class="input-area">
+            <input type="text" id="userInput" placeholder="Ask about the user or their conversations…" onkeypress="if(event.key==='Enter')ask()">
+            <button class="send-btn" onclick="ask()">Send →</button>
         </div>
     </div>
 
-    <div class="input-area">
-        <input type="text" id="userInput" placeholder="Ask about the user or their conversations…" onkeypress="if(event.key==='Enter')ask()">
-        <button class="send-btn" onclick="ask()">Send →</button>
+    <!-- Timeline Tab -->
+    <div class="tab-content" id="tab-timeline">
+        <div class="timeline-container" id="timeline-content">
+            <div class="timeline-header">
+                <h3>📊 Persona Drift Timeline</h3>
+                <p>Sentiment and tone tracked across simulated days</p>
+            </div>
+            <div class="timeline-stats" id="tl-stats"></div>
+            <div class="chart-area">
+                <div class="chart-title">Sentiment Over Time</div>
+                <svg id="sentiment-chart" class="chart-svg" height="200"></svg>
+            </div>
+            <div class="drift-list" id="drift-list"></div>
+        </div>
     </div>
 </main>
 
 <script>
-    // ── Load Persona Sidebar ─────────────────────────
-    fetch('/api/persona').then(r => r.json()).then(data => {
-        const u = data.user_1 || {};
-        if (!u.communication_style) return;
+// ── Tabs ──────────────────────────────────────────
+function switchTab(tab) {
+    document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+    document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
+    document.querySelector(`.tab-btn[onclick*="${tab}"]`).classList.add('active');
+    document.getElementById('tab-' + tab).classList.add('active');
+    if (tab === 'timeline' && !window._timelineLoaded) loadTimeline();
+}
 
-        const s = u.communication_style;
-        const pt = u.personality_traits || {};
+// ── Load Health ───────────────────────────────────
+fetch('/api/health').then(r=>r.json()).then(d=>{
+    const parts = [];
+    if(d.intent_model_loaded) parts.push('Intent');
+    parts.push(`${d.topics} topics`);
+    if(d.timeline_days) parts.push(`${d.timeline_days} days`);
+    document.getElementById('status-text').textContent = parts.join(' · ');
+});
 
-        // Stats grid
-        document.getElementById('persona-stats').innerHTML = `
-            <h3>Overview</h3>
-            <div class="stats-grid">
-                <div class="stat-card"><div class="value">${s.avg_words_per_message}</div><div class="label">Words / Msg</div></div>
-                <div class="stat-card"><div class="value">${s.total_messages_analysed?.toLocaleString() || '?'}</div><div class="label">Messages</div></div>
-                <div class="stat-card"><div class="value">${s.tone}</div><div class="label">Tone</div></div>
-                <div class="stat-card"><div class="value">${s.emoji_usage}</div><div class="label">Emoji</div></div>
-            </div>
-        `;
+// ── Load Persona Sidebar ─────────────────────────
+fetch('/api/persona').then(r=>r.json()).then(data=>{
+    const u = data.user_1 || {};
+    if(!u.communication_style) return;
+    const s=u.communication_style, pt=u.personality_traits||{}, h=u.habits||{}, f=u.personal_facts||{};
+    document.getElementById('persona-stats').innerHTML = `<h3>Overview</h3><div class="stats-grid">
+        <div class="stat-card"><div class="value">${s.avg_words_per_message}</div><div class="label">Words/Msg</div></div>
+        <div class="stat-card"><div class="value">${(s.total_messages_analysed||0).toLocaleString()}</div><div class="label">Messages</div></div>
+        <div class="stat-card"><div class="value">${s.tone}</div><div class="label">Tone</div></div>
+        <div class="stat-card"><div class="value">${s.emoji_usage}</div><div class="label">Emoji</div></div></div>`;
+    document.getElementById('persona-habits').innerHTML = `<h3>Habits</h3>
+        <div class="persona-item"><span class="icon">🛏️</span><span>${(h.sleep||[]).join(', ')}</span></div>
+        <div class="persona-item"><span class="icon">🍕</span><span>${(h.food||[]).join(', ')}</span></div>
+        <div class="persona-item"><span class="icon">🏃</span><span>${(h.exercise||[]).join(', ')}</span></div>
+        <div class="persona-item"><span class="icon">🎮</span><span>${(h.hobbies_interests||[]).join(', ')}</span></div>`;
+    document.getElementById('persona-facts').innerHTML = `<h3>Personal Facts</h3>
+        <div class="persona-item"><span class="icon">👥</span><span>${(f.relationships||[]).join(', ')}</span></div>
+        <div class="persona-item"><span class="icon">📍</span><span>${(f.locations||[]).join(', ')}</span></div>
+        <div class="persona-item"><span class="icon">📅</span><span>${(f.events||[]).join(', ')}</span></div>`;
+    document.getElementById('persona-style').innerHTML = `<h3>Personality</h3>
+        <div class="persona-item"><span class="icon">😄</span><span>${pt.humor||'N/A'}</span></div>
+        <div class="persona-item"><span class="icon">❤️</span><span>${pt.emotional_expressiveness||'N/A'}</span></div>
+        <div class="persona-item"><span class="icon">🎭</span><span>${pt.sentiment||'N/A'}</span></div>`;
+});
 
-        // Habits
-        const h = u.habits || {};
-        document.getElementById('persona-habits').innerHTML = `
-            <h3>Habits</h3>
-            <div class="persona-item"><span class="icon">🛏️</span><span>${(h.sleep||[]).join(', ')}</span></div>
-            <div class="persona-item"><span class="icon">🍕</span><span>${(h.food||[]).join(', ')}</span></div>
-            <div class="persona-item"><span class="icon">🏃</span><span>${(h.exercise||[]).join(', ')}</span></div>
-            <div class="persona-item"><span class="icon">🎮</span><span>${(h.hobbies_interests||[]).join(', ')}</span></div>
-        `;
+// ── Timeline ──────────────────────────────────────
+function loadTimeline() {
+    window._timelineLoaded = true;
+    fetch('/api/timeline').then(r=>r.json()).then(data=>{
+        const tl = data.timeline || [];
+        const driftEvents = tl.filter(t=>t.drift);
 
-        // Facts
-        const f = u.personal_facts || {};
-        document.getElementById('persona-facts').innerHTML = `
-            <h3>Personal Facts</h3>
-            <div class="persona-item"><span class="icon">👥</span><span>${(f.relationships||[]).join(', ')}</span></div>
-            <div class="persona-item"><span class="icon">📍</span><span>${(f.locations||[]).join(', ')}</span></div>
-            <div class="persona-item"><span class="icon">📅</span><span>${(f.events||[]).join(', ')}</span></div>
-        `;
+        // Stats
+        document.getElementById('tl-stats').innerHTML = `
+            <div class="tl-stat"><div class="val">${data.total_days}</div><div class="lbl">Days</div></div>
+            <div class="tl-stat"><div class="val">${data.drift_events}</div><div class="lbl">Drift Events</div></div>
+            <div class="tl-stat"><div class="val">${tl.length>0 ? tl[tl.length-1].tone : '—'}</div><div class="lbl">Current Tone</div></div>
+            <div class="tl-stat"><div class="val">${tl.length>0 ? tl[tl.length-1].sentiment.toFixed(2) : '—'}</div><div class="lbl">Latest Sentiment</div></div>`;
 
-        // Personality
-        document.getElementById('persona-style').innerHTML = `
-            <h3>Personality</h3>
-            <div class="persona-item"><span class="icon">😄</span><span>${pt.humor || 'N/A'}</span></div>
-            <div class="persona-item"><span class="icon">❤️</span><span>${pt.emotional_expressiveness || 'N/A'}</span></div>
-            <div class="persona-item"><span class="icon">🎭</span><span>${pt.sentiment || 'N/A'}</span></div>
-        `;
+        // SVG Chart
+        renderChart(tl, driftEvents);
+
+        // Drift cards
+        let driftHtml = '<h4>⚡ Drift Events</h4>';
+        if(driftEvents.length === 0) {
+            driftHtml += '<p style="color:var(--text-muted);font-size:13px;">No significant drift events detected.</p>';
+        } else {
+            driftEvents.forEach(d => {
+                const triggers = (d.trigger_topics||[]).map(t=>`<span class="trigger-tag">${t}</span>`).join('');
+                const signals = (d.trigger_signals||[]).map(t=>`<span class="trigger-tag">${t}</span>`).join('');
+                driftHtml += `<div class="drift-card">
+                    <div class="drift-day">Day ${d.day}</div>
+                    <div class="drift-change">${d.drift_details.prev_tone} → <strong>${d.tone}</strong> (sentiment Δ${d.drift_details.sentiment_delta.toFixed(3)})</div>
+                    <div class="drift-triggers">Keywords: ${triggers}</div>
+                    ${signals ? `<div class="drift-triggers" style="margin-top:4px;">Signals: ${signals}</div>` : ''}
+                </div>`;
+            });
+        }
+        document.getElementById('drift-list').innerHTML = driftHtml;
+    });
+}
+
+function renderChart(tl, driftEvents) {
+    const svg = document.getElementById('sentiment-chart');
+    if(!tl.length) return;
+    // Sample every N days for performance
+    const step = Math.max(1, Math.floor(tl.length / 150));
+    const sampled = tl.filter((_,i) => i % step === 0 || _.drift);
+    const W = Math.max(600, sampled.length * 5);
+    const H = 180, padL = 40, padR = 20, padT = 10, padB = 30;
+    const chartW = W - padL - padR, chartH = H - padT - padB;
+    svg.setAttribute('viewBox', `0 0 ${W} ${H}`);
+    svg.style.minWidth = W + 'px';
+
+    // Axes
+    let html = `<line x1="${padL}" y1="${padT}" x2="${padL}" y2="${H-padB}" stroke="var(--border)" stroke-width="1"/>`;
+    html += `<line x1="${padL}" y1="${H-padB}" x2="${W-padR}" y2="${H-padB}" stroke="var(--border)" stroke-width="1"/>`;
+    // Y labels
+    for(let v = -0.5; v <= 1; v += 0.5) {
+        const y = padT + chartH * (1 - (v + 0.5) / 1.5);
+        html += `<text x="${padL-5}" y="${y+4}" fill="var(--text-muted)" font-size="10" text-anchor="end">${v.toFixed(1)}</text>`;
+        html += `<line x1="${padL}" y1="${y}" x2="${W-padR}" y2="${y}" stroke="var(--border)" stroke-width="0.5" stroke-dasharray="4"/>`;
+    }
+    // Zero line
+    const zeroY = padT + chartH * (1 - 0.5 / 1.5);
+    html += `<line x1="${padL}" y1="${zeroY}" x2="${W-padR}" y2="${zeroY}" stroke="var(--text-muted)" stroke-width="1" stroke-dasharray="2"/>`;
+
+    // Line path
+    let path = '';
+    const points = [];
+    sampled.forEach((d, i) => {
+        const x = padL + (i / (sampled.length - 1)) * chartW;
+        const y = padT + chartH * (1 - (d.sentiment + 0.5) / 1.5);
+        points.push({x, y, d});
+        path += (i === 0 ? 'M' : 'L') + `${x.toFixed(1)},${y.toFixed(1)} `;
+    });
+    html += `<path d="${path}" fill="none" stroke="var(--accent)" stroke-width="1.5"/>`;
+
+    // Drift markers
+    points.forEach(p => {
+        if(p.d.drift) {
+            html += `<circle cx="${p.x.toFixed(1)}" cy="${p.y.toFixed(1)}" r="5" fill="var(--orange)" stroke="var(--bg-card)" stroke-width="2"/>`;
+            html += `<text x="${p.x.toFixed(1)}" y="${p.y.toFixed(1)-10}" fill="var(--orange)" font-size="9" text-anchor="middle">Day ${p.d.day}</text>`;
+        }
     });
 
-    // ── Chat ─────────────────────────────────────────
-    function ask(msg) {
-        const text = msg || document.getElementById('userInput').value.trim();
-        if (!text) return;
-        document.getElementById('userInput').value = '';
-        appendMsg('user', text);
+    svg.innerHTML = html;
+}
 
-        // Show typing indicator
-        const typingDiv = document.createElement('div');
-        typingDiv.className = 'message bot';
-        typingDiv.innerHTML = '<div class="typing-indicator"><span></span><span></span><span></span></div>';
-        const msgs = document.getElementById('messages');
-        msgs.appendChild(typingDiv);
-        msgs.scrollTop = msgs.scrollHeight;
+// ── Chat ──────────────────────────────────────────
+function ask(msg) {
+    const text = msg || document.getElementById('userInput').value.trim();
+    if(!text) return;
+    document.getElementById('userInput').value = '';
+    switchTab('chat');
+    appendMsg('user', text);
+    const typingDiv = document.createElement('div');
+    typingDiv.className = 'message bot';
+    typingDiv.innerHTML = '<div class="typing-indicator"><span></span><span></span><span></span></div>';
+    const msgs = document.getElementById('messages');
+    msgs.appendChild(typingDiv);
+    msgs.scrollTop = msgs.scrollHeight;
 
-        fetch('/api/chat', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ message: text })
-        })
-        .then(r => r.json())
-        .then(data => {
-            typingDiv.remove();
+    fetch('/api/chat', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({message:text}) })
+    .then(r=>r.json())
+    .then(data=>{
+        typingDiv.remove();
+        let html = '';
+        // Intent badge
+        if(data.intent && data.intent !== 'unknown') {
+            html += `<div class="intent-badge">${data.intent} (${Math.round((data.confidence||0)*100)}%)</div>`;
+        }
+        html += data.response.replace(/\*\*(.+?)\*\*/g,'<strong>$1</strong>').replace(/\n/g,'<br>');
+        if(data.sources && data.sources.length > 0) {
+            html += '<div class="sources-section"><div class="sources-title">Sources</div>';
+            data.sources.forEach(s=>{
+                const cls = s.type||'chunk';
+                let label = s.type==='topic' ? `Topic #${s.topic_id} (${s.msgs})` :
+                            s.type==='checkpoint' ? `Checkpoint #${s.checkpoint_id}` :
+                            s.type==='chunk' ? `Day ${s.day_id||'?'} · Msgs ${s.msgs}` :
+                            s.type==='persona' ? 'Persona Data' : s.type;
+                const score = s.score ? ` (${s.score})` : '';
+                html += `<span class="source-tag ${cls}">${label}${score}</span>`;
+            });
+            html += '</div>';
+        }
+        appendMsg('bot', html, true);
+    })
+    .catch(()=>{ typingDiv.remove(); appendMsg('bot','Error: Could not reach the server.'); });
+}
 
-            // Format the response — convert **bold** to <strong>
-            let html = data.response
-                .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
-                .replace(/\n/g, '<br>');
-
-            if (data.sources && data.sources.length > 0) {
-                html += '<div class="sources-section"><div class="sources-title">Sources</div>';
-                data.sources.forEach(s => {
-                    const cls = s.type || 'chunk';
-                    const label = s.type === 'topic' ? `Topic #${s.topic_id} (msgs ${s.msgs})` :
-                                  s.type === 'checkpoint' ? `Checkpoint #${s.checkpoint_id}` :
-                                  s.type === 'chunk' ? `Msgs ${s.msgs}` :
-                                  s.type === 'persona' ? 'Persona Data' : s.type;
-                    const scoreText = s.score ? ` (score: ${s.score})` : '';
-                    html += `<span class="source-tag ${cls}">${label}${scoreText}</span>`;
-                });
-                html += '</div>';
-            }
-            appendMsg('bot', html, true);
-        })
-        .catch(err => {
-            typingDiv.remove();
-            appendMsg('bot', 'Error: Could not reach the server.', false);
-        });
-    }
-
-    function appendMsg(role, content, isHtml = false) {
-        const div = document.createElement('div');
-        div.className = `message ${role}`;
-        if (isHtml) div.innerHTML = content;
-        else div.textContent = content;
-        const msgs = document.getElementById('messages');
-        msgs.appendChild(div);
-        msgs.scrollTop = msgs.scrollHeight;
-    }
+function appendMsg(role, content, isHtml=false) {
+    const div = document.createElement('div');
+    div.className = `message ${role}`;
+    if(isHtml) div.innerHTML = content; else div.textContent = content;
+    const msgs = document.getElementById('messages');
+    msgs.appendChild(div);
+    msgs.scrollTop = msgs.scrollHeight;
+}
 </script>
 </body>
 </html>

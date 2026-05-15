@@ -9,6 +9,8 @@ pinned: false
 
 # RAG Persona Chatbot — Adaptive Offline-First Architecture
 
+> **📄 [System Design Doc](SYSTEM_DESIGN.md)** · **📝 [Self-Evaluation Sheet](EVALUATION.md)** · **🎥 [Video Walkthrough](https://www.loom.com/share/5037df93b96f4ef094e1dab9ba330a9c)**
+
 A complete end-to-end **Retrieval-Augmented Generation (RAG)** system with **Adaptive Persona Tracking**, **Offline Intent Classification**, and **Conflict-Aware Retrieval**, built on 11,000+ multi-turn conversations (191k+ messages). Everything runs locally — no external LLM API calls.
 
 ---
